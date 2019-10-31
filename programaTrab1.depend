@@ -1,0 +1,6 @@
+# depslib dependency file v1.0
+1572116135 source:d:\users\helbert\google drive\eng comp\4 - estrutura de dados iii\trabalho\programatrab1\main.c
+	<stdio.h>
+	<stdlib.h>
+	<string.h>
+
