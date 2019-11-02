@@ -68,11 +68,18 @@ void transfere_dados_csv_bin() {
 	fgetc(file_csv);
 
 	int t_feof;
+	Cabecalho_PTR cab = calloc(1, sizeof(Cabecalho));
+
+	fwrite(&cab->status, sizeof(char), 1, file_bin);
+	fwrite(&cab->numeroVertices, sizeof(int), 1, file_bin);
+	fwrite(&cab->numeroArestas , sizeof(int), 1, file_bin);
+	fwrite(cab->dataUltimaCompactacao, 10 * sizeof(char), 1, file_bin);
+
 	while (!(t_feof = feof(file_csv))) {
         reg = ler_registro(file_csv);   // LE registro
         computar_vertice(lista, reg->cidade_orig);
         computar_vertice(lista, reg->cidade_dest);
-//        salvar_registro(file_bin, reg); // SALVA registro
+        salvar_registro(file_bin, reg); // SALVA registro
         limpar_memoria(reg);
 	}
 	printf("NUM VERTICES: %d\n",lista->tam_lista);
@@ -88,8 +95,7 @@ void transfere_dados_csv_bin() {
 Registro_PTR ler_registro(FILE* file_csv){
     Registro_PTR reg = (Registro_PTR)calloc(1, sizeof(Registro));
 
-    fscanf(file_csv, "%[^,] %*c %[^,] %*c %d %*c %[^,] %*c %[^,] %*c", reg->UF_orig, reg->UF_dest, &reg->distancia, reg->cidade_orig, reg->cidade_dest);
-    fscanf(file_csv, "%[^\n]*c", reg->tempo);
+    fscanf(file_csv, "%[^,] %*c %[^,] %*c %d %*c %[^,] %*c %[^,] %*c%[^\n]*c", reg->UF_orig, reg->UF_dest, &reg->distancia, reg->cidade_orig, reg->cidade_dest, reg->tempo);
     fgetc(file_csv);
 
     return reg;
