@@ -1,8 +1,9 @@
 # depslib dependency file v1.0
-1572729968 source:d:\users\helbert\google drive\eng comp\4 - estrutura de dados iii\trabalho\programatrab1\main.c
+1572746620 source:d:\users\helbert\google drive\eng comp\4 - estrutura de dados iii\trabalho\programatrab1\main.c
 	<stdlib.h>
 	<string.h>
 	<stdio.h>
 	<ctype.h>
 	<stdbool.h>
+	<time.h>
 

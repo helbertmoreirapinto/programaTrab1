@@ -3,6 +3,7 @@
 #include <stdio.h>
 #include <ctype.h>
 #include <stdbool.h>
+#include <time.h>
 
 #define TAM_REG 85
 #define TAM_CAMPO_FIXO 8
@@ -47,44 +48,72 @@ typedef ListaVertice* ListaVertice_PTR;
 
 /* Prototipos de funcoes */
 void transfere_dados_csv_bin();
-Registro_PTR ler_registro(FILE*);
+Registro_PTR ler_registro(char, FILE*);
 int salvar_registro(FILE*, Registro_PTR);
 void limpar_memoria(Registro_PTR);
 void computar_vertice(ListaVertice_PTR, char*);
+char* get_data_sistema_formatada();
 
 int main(){
+
 	transfere_dados_csv_bin();
 	return 0;
+}
+
+char* get_data_sistema_formatada(){
+    char* data = (char*) calloc(11, sizeof(char));
+    time_t mytime;
+    mytime = time(NULL);
+    struct tm tm = *localtime(&mytime);
+    tm.tm_mon += 1;
+    tm.tm_year += 1900;
+    snprintf(data, 11, "%02d/%02d/%04d", tm.tm_mday, tm.tm_mon, tm.tm_year);
+    return data;
 }
 
 void transfere_dados_csv_bin() {
 	FILE* file_csv = fopen("conjuntoDados.csv", "r");
 	FILE* file_bin = fopen("conjuntoDados.bin", "wb");
 	FILE* file_vert = fopen("vertices.bin", "wb");
+
 	ListaVertice_PTR lista = calloc(1, sizeof(ListaVertice));
+	Cabecalho_PTR cab = calloc(1, sizeof(Cabecalho));
     Registro_PTR reg;
 
 	fscanf(file_csv, "%*[^\n]");
 	fgetc(file_csv);
 
-	int t_feof;
-	Cabecalho_PTR cab = calloc(1, sizeof(Cabecalho));
-
+	//Escrever cabecalho
 	fwrite(&cab->status, sizeof(char), 1, file_bin);
 	fwrite(&cab->numeroVertices, sizeof(int), 1, file_bin);
 	fwrite(&cab->numeroArestas , sizeof(int), 1, file_bin);
 	fwrite(cab->dataUltimaCompactacao, 10 * sizeof(char), 1, file_bin);
 
-	while (!(t_feof = feof(file_csv))) {
-        reg = ler_registro(file_csv);   // LE registro
+	char c;
+	while((c = fgetc(file_csv)) != EOF) {
+        reg = ler_registro(c, file_csv);   // LE registro
         computar_vertice(lista, reg->cidade_orig);
         computar_vertice(lista, reg->cidade_dest);
         salvar_registro(file_bin, reg); // SALVA registro
         limpar_memoria(reg);
+        cab->numeroArestas++;
 	}
-	printf("NUM VERTICES: %d\n",lista->tam_lista);
-	for(int i = 0; i < lista->tam_lista; i++){
-        printf("%02d - %-20s%d\n",(i+1),lista->lista_vertice[i]->nome_vertice, lista->lista_vertice[i]->qtd_rep);
+	cab->status = '1';
+	cab->numeroVertices = lista->tam_lista;
+	char* data = get_data_sistema_formatada();
+	strcpy(cab->dataUltimaCompactacao, data);
+	free(data);
+
+	//Reescrever cabecalho
+	rewind (file_bin);
+	fwrite(&cab->status, sizeof(char), 1, file_bin);
+	fwrite(&cab->numeroVertices, sizeof(int), 1, file_bin);
+	fwrite(&cab->numeroArestas , sizeof(int), 1, file_bin);
+	fwrite(cab->dataUltimaCompactacao, 10 * sizeof(char), 1, file_bin);
+
+	for(int i  = 0; i < lista->tam_lista; i++){
+        fwrite(lista->lista_vertice[i]->nome_vertice, 20 * sizeof(char), 1, file_vert);
+        fwrite(&lista->lista_vertice[i]->qtd_rep, sizeof(int), 1, file_vert);
 	}
 
 	fclose(file_csv);
@@ -92,31 +121,31 @@ void transfere_dados_csv_bin() {
 	fclose(file_vert);
 }
 
-Registro_PTR ler_registro(FILE* file_csv){
+Registro_PTR ler_registro(char c, FILE* file_csv){
     Registro_PTR reg = (Registro_PTR)calloc(1, sizeof(Registro));
-
-    fscanf(file_csv, "%[^,] %*c %[^,] %*c %d %*c %[^,] %*c %[^,] %*c%[^\n]*c", reg->UF_orig, reg->UF_dest, &reg->distancia, reg->cidade_orig, reg->cidade_dest, reg->tempo);
+    reg->UF_orig[0] = c;
+    fscanf(file_csv, "%c %*c %[^,] %*c %d %*c %[^,] %*c %[^,] %*c%[^\n]*c", &reg->UF_orig[1], reg->UF_dest, &reg->distancia, reg->cidade_orig, reg->cidade_dest, reg->tempo);
     fgetc(file_csv);
 
     return reg;
 }
 
 int salvar_registro(FILE* file_bin, Registro_PTR reg){
-    char lixo = '#';
     int tam_cidade_orig = strlen(reg->cidade_orig);
     int tam_cidade_dest = strlen(reg->cidade_dest);
     int tam_tempo = strlen(reg->tempo);
-    int tam_lixo = TAM_REG - TAM_CAMPO_FIXO - tam_cidade_dest - tam_cidade_orig - tam_tempo;
+    int tam_lixo = TAM_REG - TAM_CAMPO_FIXO - (tam_cidade_dest+1) - (tam_cidade_orig+1) - (tam_tempo+1);
     if(tam_lixo < 0) return ERRO;
 
     fwrite(reg->UF_orig, 2*sizeof(char), 1, file_bin);
     fwrite(reg->UF_dest, 2*sizeof(char), 1, file_bin);
     fwrite(&reg->distancia, sizeof(int), 1, file_bin);
-    fwrite(reg->cidade_orig, tam_cidade_orig * sizeof(char), 1, file_bin);
-    fwrite(reg->cidade_dest, tam_cidade_dest * sizeof(char), 1, file_bin);
-    fwrite(reg->tempo, tam_tempo * sizeof(char), 1, file_bin);
+    fwrite(reg->cidade_orig, tam_cidade_orig * sizeof(char), 1, file_bin); fputc('|', file_bin);
+    fwrite(reg->cidade_dest, tam_cidade_dest * sizeof(char), 1, file_bin); fputc('|', file_bin);
+    fwrite(reg->tempo, tam_tempo * sizeof(char), 1, file_bin); fputc('|', file_bin);
+
     while(tam_lixo > 0){
-        fwrite(&lixo, sizeof(char), 1, file_bin);
+        fputc('#', file_bin);
         tam_lixo--;
     }
     return OK;
