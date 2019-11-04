@@ -85,7 +85,7 @@ int ler_reg(FILE*, Registro_PTR);
 void scan_quote_string(char*);
 void inserir_reg(char*, int);
 void compact(char*, char*);
-
+void binarioNaTela1(char*);
 
 int main() {
     int operacao;
@@ -179,7 +179,6 @@ void transfere_dados_csv_bin(char* nome_csv, char* nome_bin) {
     ListaArestaVertice_PTR lista;
     Cabecalho_PTR cab;
     Registro_PTR reg;
-    char* data;
 
     //Pular cabecalho arquivo.CSV
     fscanf(file_csv, "%*[^\n]");
@@ -209,16 +208,15 @@ void transfere_dados_csv_bin(char* nome_csv, char* nome_bin) {
     cab->status = STATUS_OK;
     cab->numeroVertices = lista->numeroVertices;
     cab->numeroArestas = lista->numeroArestas;
-    data = (char*) calloc(11, sizeof(char));
-    get_data_sistema_formatada(data);
-    strcpy(cab->dataUltimaCompactacao, data);
-    free(data);
+    strcpy(cab->dataUltimaCompactacao, "##########");
     free(lista);
     escrever_cabecalho(file_bin, cab);
     free(cab);
 
     fclose(file_csv);
     fclose(file_bin);
+
+    binarioNaTela1(nome_bin);
 }
 
 //FUNC[2] - Resgatar todos registros arquivo.BIN.
@@ -367,6 +365,8 @@ void remove_reg_filtro(char* nome_file_bin, int qtd_it) {
 
     free(cab);
     fclose(file_bin);
+
+    binarioNaTela1(nome_file_bin);
 }
 
 //FUNC[6] - Inserir registro em arquivo.BIN nos locais onde existem registros removidos.
@@ -423,6 +423,8 @@ void inserir_reg(char* nome_file_bin, int qtd_inserir){
     free(cab);
 
     fclose(file_bin);
+
+    binarioNaTela1(nome_file_bin);
 }
 
 //FUNC[7] - Atualizar registro em arquivo.BIN com filtro de valor de campo.
@@ -500,6 +502,8 @@ void atualizar_campo_registro(char* nome_file, int qtd_atualizacoes) {
     free(cab);
 
     fclose(file_bin);
+
+    binarioNaTela1(nome_file);
 }
 
 //FUNC[8] - Compactar arquivo.BIN, removendo fisicamente os registros removidos.
@@ -557,6 +561,8 @@ void compact(char* nome_file_orig, char* nome_file_compac) {
 
     fclose(file_bin);
     fclose(file_bin_compac);
+
+    binarioNaTela1(nome_file_compac);
 }
 
 void get_data_sistema_formatada(char* data) {
@@ -748,4 +754,27 @@ void scan_quote_string(char *str) {
     } else { // EOF
         strcpy(str, "");
     }
+}
+void binarioNaTela1(char *nomeArquivoBinario) {
+    unsigned long i, cs;
+	unsigned char *mb;
+	size_t fl;
+	FILE *fs;
+	if(nomeArquivoBinario == NULL || !(fs = fopen(nomeArquivoBinario, "rb"))) {
+		fprintf(stderr, "ERRO AO ESCREVER O BINARIO NA TELA (função binarioNaTela1): não foi possível abrir o arquivo que me passou para leitura. Ele existe e você tá passando o nome certo? Você lembrou de fechar ele com fclose depois de usar?\n");
+		return;
+	}
+	fseek(fs, 0, SEEK_END);
+	fl = ftell(fs);
+	fseek(fs, 0, SEEK_SET);
+	mb = (unsigned char *) malloc(fl);
+	fread(mb, 1, fl, fs);
+
+	cs = 0;
+	for(i = 0; i < fl; i++) {
+		cs += (unsigned long) mb[i];
+	}
+	printf("%lf\n", (cs / (double) 100));
+	free(mb);
+	fclose(fs);
 }
