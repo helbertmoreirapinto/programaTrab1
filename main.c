@@ -236,6 +236,7 @@ void exibir_bin(char* nome_bin, int RRN, char* campo, char* valor) {
     bool cond;
     bool achou = false;;
 
+    //Pulando cabecalho arquivo.BIN
     fseek(file_bin, TAM_CAB, SEEK_CUR);
     if(RRN >= 0) {                                                      //BUSCA POR RRN
 
@@ -268,6 +269,7 @@ void exibir_bin(char* nome_bin, int RRN, char* campo, char* valor) {
                        (!strcmp(campo, CIDADE_ORIG) && !strcmp(reg->cidade_orig, valor)) ||
                        (!strcmp(campo, CIDADE_DEST) && !strcmp(reg->cidade_dest, valor));
 
+                //Se a condicao for satisfeita, exibir registro
                 if(cond && reg->UF_orig[0] != REMOVIDO) {
                     exibe_reg(i, reg);
                     achou = true;
@@ -296,7 +298,6 @@ void remove_reg_filtro(char* nome_file_bin, int qtd_it) {
         return;
     }
 
-    char apagar = REMOVIDO;
     bool cond;
     int aux;
     char campo[50];
@@ -305,12 +306,14 @@ void remove_reg_filtro(char* nome_file_bin, int qtd_it) {
     Registro_PTR reg;
     ListaArestaVertice_PTR lista;
 
+    //Escrever cabecalho arquivo.BIN
     rewind(file_bin);
     cab = (Cabecalho_PTR) calloc(1, sizeof(Cabecalho));
     fwrite(&cab->status, sizeof(char), 1, file_bin);
     fseek(file_bin, 2 * sizeof(int), SEEK_CUR);
     fread(cab->dataUltimaCompactacao, 10 * sizeof(char), 1, file_bin);
 
+    //Removendo registros
     for(int i = 0; i < qtd_it; i++) {
         fscanf(stdin, "%s", campo);
         scan_quote_string(valor);
@@ -319,10 +322,14 @@ void remove_reg_filtro(char* nome_file_bin, int qtd_it) {
         while(true) {
             reg = (Registro_PTR) calloc(1, sizeof(Registro));
             aux = ler_reg(file_bin, reg);
+
+            //Terminou arquivo
             if(aux == ERRO) {
                 free(reg);
                 break;
             }
+
+            //Pular registros ja removidos
             if(reg->UF_orig[0] == REMOVIDO) {
                 free(reg);
                 continue;
@@ -334,9 +341,11 @@ void remove_reg_filtro(char* nome_file_bin, int qtd_it) {
                    (!strcmp(campo, TEMPO) && !strcmp(reg->tempo, valor)) ||
                    (!strcmp(campo, CIDADE_ORIG) && !strcmp(reg->cidade_orig, valor)) ||
                    (!strcmp(campo, CIDADE_DEST) && !strcmp(reg->cidade_dest, valor));
+
+            //Se a condicao for satisfeita, remover registro
             if(cond) {
                 fseek(file_bin, -(TAM_REG), SEEK_CUR);
-                fwrite(&apagar, sizeof(char), 1, file_bin);
+                fputc(REMOVIDO, file_bin);
                 fseek(file_bin, (TAM_REG-1), SEEK_CUR);
             }
             free(reg);
@@ -347,7 +356,7 @@ void remove_reg_filtro(char* nome_file_bin, int qtd_it) {
     lista = (ListaArestaVertice_PTR) calloc(1, sizeof(ListaArestaVertice));
     atualizar_arq_vertice(file_bin, lista);
 
-    //Reescrever cabecalho
+    //Reescrever cabecalho arquivo.BIN
     rewind (file_bin);
     cab->status = STATUS_OK;
     cab->numeroVertices = lista->numeroVertices;
@@ -381,7 +390,6 @@ void inserir_reg(char* nome_file_bin, int qtd_inserir){
     fread(cab->dataUltimaCompactacao, 10*sizeof(char), 1, file_bin);
 
     for(int i = 0; i < qtd_inserir; i++){
-        //pega reg
         reg = (Registro_PTR) calloc(1, sizeof(Registro));
         fscanf(stdin, "%s", reg->UF_orig);
         fscanf(stdin, "%s", reg->UF_dest);
@@ -391,15 +399,17 @@ void inserir_reg(char* nome_file_bin, int qtd_inserir){
         scan_quote_string(reg->tempo);
         fgetc(stdin);
 
+        //Procurando registros removidos
         while((c = fgetc(file_bin)) != REMOVIDO)
             fseek(file_bin, TAM_REG-1, SEEK_CUR);
         fseek(file_bin, -1, SEEK_CUR);
 
+        //Salvando novo registro
         salvar_reg_bin(file_bin, reg);
         free(reg);
     }
 
-    //VERTICE
+    //Contar Vertices e Arestas
     lista = (ListaArestaVertice_PTR) calloc(1, sizeof(ListaArestaVertice));
     atualizar_arq_vertice(file_bin, lista);
 
@@ -455,6 +465,7 @@ void atualizar_campo_registro(char* nome_file, int qtd_atualizacoes) {
             continue;
         }
 
+        //Alterar o campo
         if(!strcmp(campo, UF_DEST)) {
             strcpy(reg->UF_dest, valor);
         } else if(!strcmp(campo, UF_ORIG)) {
@@ -468,6 +479,8 @@ void atualizar_campo_registro(char* nome_file, int qtd_atualizacoes) {
         } else if(!strcmp(campo, CIDADE_DEST)) {
             strcpy(reg->cidade_dest, valor);
         }
+
+        //Salvar registro
         fseek(file_bin, -(TAM_REG), SEEK_CUR);
         salvar_reg_bin(file_bin, reg);
         free(reg);
@@ -505,21 +518,26 @@ void compact(char* nome_file_orig, char* nome_file_compac) {
 
     cab = (Cabecalho_PTR) calloc(1, sizeof(Cabecalho));
 
+    //Lendo cabecalho arquivo.BIN
     rewind(file_bin);
     fseek(file_bin, 1, SEEK_CUR);
     fread(&cab->numeroVertices, sizeof(int), 1, file_bin);
     fread(&cab->numeroArestas, sizeof(int), 1, file_bin);
     fread(cab->dataUltimaCompactacao, 10 * sizeof(char), 1, file_bin);
 
+    //Escrevendo cabecalho arquivo_compac.BIN
     escrever_cabecalho(file_bin_compac, cab);
 
     while(true) {
         reg = (Registro_PTR) calloc(1, sizeof(Registro));
         aux = ler_reg(file_bin, reg);
+        //Fim do arquivo
         if(aux == ERRO) {
             free(reg);
             break;
         }
+
+        //Pulando removidos
         if(reg->UF_orig[0] == REMOVIDO) {
             free(reg);
             continue;
@@ -528,6 +546,7 @@ void compact(char* nome_file_orig, char* nome_file_compac) {
         free(reg);
     }
 
+    //Reescrevendo cabecalho arquivo_compac.BIN
     cab->status = STATUS_OK;
     data = (char*) calloc(11, sizeof(char));
     get_data_sistema_formatada(data);
