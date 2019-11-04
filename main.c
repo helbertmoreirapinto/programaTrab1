@@ -13,7 +13,9 @@
 #define OK 0
 #define ERRO 1
 #define STATUS_OK '1'
+#define REMOVIDO '*'
 #define TODOS -1
+#define FILTRO -2
 
 #define UF_ORIG "estadoOrigem"
 #define UF_DEST "estadoDestino"
@@ -74,13 +76,15 @@ void ler_reg_csv(char, FILE*, Registro_PTR);
 int salvar_reg_bin(FILE*, Registro_PTR);
 void atualizar_arq_vertice(FILE*, ListaArestaVertice_PTR);
 void get_data_sistema_formatada(char*);
-void exibir_bin(char*, int);
+void exibir_bin(char*, int, char*, char*);
 void exibe_reg(int, Registro_PTR);
 int ler_reg(FILE*, Registro_PTR);
 void compact(char*, char*);
 void atualizar_campo_registro(char*, int);
 void inserir_aresta(ListaArestaVertice_PTR, char*);
 void escrever_cabecalho(FILE*, Cabecalho_PTR);
+void scan_quote_string(char*);
+void remove_reg_filtro(char*, int);
 
 int main() {
     int operacao;
@@ -104,15 +108,16 @@ int main() {
         fscanf(stdin, "%s", param_1);
         fgetc(stdin);
 
-        exibir_bin(param_1, TODOS);
+        exibir_bin(param_1, TODOS, "", "");
         break;
 
     case READ_FIL:
         fscanf(stdin, "%s", param_1);
         fscanf(stdin, "%s", param_2);
-        fscanf(stdin, "%s", param_3);
+        scan_quote_string(param_3);
         fgetc(stdin);
 
+        exibir_bin(param_1, FILTRO, param_2, param_3);
         break;
 
     case READ_RRN:
@@ -120,7 +125,7 @@ int main() {
         fscanf(stdin, "%d", &param);
         fgetc(stdin);
 
-        exibir_bin(param_1, param);
+        exibir_bin(param_1, param, "", "");
         break;
 
     case DELETE_STATIC_FIL:
@@ -128,9 +133,10 @@ int main() {
         fscanf(stdin, "%d", &param);
         fgetc(stdin);
 
+        remove_reg_filtro(param_1, param);
         break;
 
-    case INCLUDE_STATIC:
+    case INCLUDE_STATIC: //FALTA AINDA
         fscanf(stdin, "%s", param_1);
         fscanf(stdin, "%d", &param);
         fgetc(stdin);
@@ -164,7 +170,7 @@ void transfere_dados_csv_bin(char* nome_csv, char* nome_bin) {
     FILE* file_csv = fopen(nome_csv, "r");
     FILE* file_bin = fopen(nome_bin, "wb+");
     if(!file_csv || !file_bin) {
-        printf("ERRO");
+        printf("Falha no carregamento do arquivo.");
         return;
     }
     ListaArestaVertice_PTR lista;
@@ -228,7 +234,7 @@ void atualizar_arq_vertice(FILE* file_bin, ListaArestaVertice_PTR lista) {
 
     while(true) {
         reg_rem = fgetc(file_bin);
-        if(reg_rem == '*')
+        if(reg_rem == REMOVIDO)
             continue;
 
         fseek(file_bin, TAM_CAMPO_FIXO - 1, SEEK_CUR); //Pula os campos fixos - 1, pois ja esta lendo um caracter pra ver se foi removido
@@ -305,7 +311,7 @@ void inserir_aresta(ListaArestaVertice_PTR lista, char* cidade) {
 void atualizar_campo_registro(char* nome_file, int qtd_atualizacoes) {
     FILE* file_bin = fopen(nome_file, "rb+");
     if(!file_bin) {
-        printf("ERRO");
+        printf("Falha no processamento do arquivo.");
         return;
     }
     int RRN;
@@ -326,7 +332,7 @@ void atualizar_campo_registro(char* nome_file, int qtd_atualizacoes) {
     for(int i = 0; i < qtd_atualizacoes; i++) {
         fscanf(stdin, "%d", &RRN);
         fscanf(stdin, "%s", campo);
-        fscanf(stdin, "%s", valor);
+        scan_quote_string(valor);
         fgetc(stdin);
 
         rewind(file_bin);
@@ -335,8 +341,10 @@ void atualizar_campo_registro(char* nome_file, int qtd_atualizacoes) {
 
         reg = (Registro_PTR) calloc(1, sizeof(Registro));
         aux = ler_reg(file_bin, reg);
-        if(aux == ERRO)
+        if(aux == ERRO) {
+            free(reg);
             continue;
+        }
 
         if(!strcmp(campo, UF_DEST)) {
             strcpy(reg->UF_dest, valor);
@@ -353,7 +361,7 @@ void atualizar_campo_registro(char* nome_file, int qtd_atualizacoes) {
         }
         fseek(file_bin, -(TAM_REG), SEEK_CUR);
         salvar_reg_bin(file_bin, reg);
-        fread(reg);
+        free(reg);
     }
 
     //Contar Vertices e Arestas
@@ -376,7 +384,7 @@ void compact(char* nome_file_orig, char* nome_file_compac) {
     FILE* file_bin = fopen(nome_file_orig, "rb");
     FILE* file_bin_compac = fopen(nome_file_compac, "wb");
     if(!file_bin || file_bin_compac) {
-        printf("ERRO");
+        printf("Falha no carregamento do arquivo.");
         return;
     }
 
@@ -398,10 +406,14 @@ void compact(char* nome_file_orig, char* nome_file_compac) {
     while(true) {
         reg = (Registro_PTR) calloc(1, sizeof(Registro));
         aux = ler_reg(file_bin, reg);
-        if(aux == ERRO)
+        if(aux == ERRO) {
+            free(reg);
             break;
-        if(reg->UF_orig[0] == '*')
+        }
+        if(reg->UF_orig[0] == REMOVIDO) {
+            free(reg);
             continue;
+        }
         salvar_reg_bin(file_bin_compac, reg);
         free(reg);
     }
@@ -427,7 +439,7 @@ void get_data_sistema_formatada(char* data) {
     snprintf(data, 11, "%02d/%02d/%04d", tm.tm_mday, tm.tm_mon, tm.tm_year);
 }
 
-Registro_PTR ler_reg_csv(char c, FILE* file_csv, Registro_PTR reg) {
+void ler_reg_csv(char c, FILE* file_csv, Registro_PTR reg) {
     reg->UF_orig[0] = c;
     fscanf(file_csv, "%c %*c %[^,] %*c %d %*c %[^,] %*c %[^,] %*c%[^\n]*c", &reg->UF_orig[1], reg->UF_dest, &reg->distancia, reg->cidade_orig, reg->cidade_dest, reg->tempo);
     fgetc(file_csv);
@@ -455,33 +467,58 @@ int salvar_reg_bin(FILE* file_bin, Registro_PTR reg) {
     return OK;
 }
 
-void exibir_bin(char* nome_bin, int RRN) {
+void exibir_bin(char* nome_bin, int RRN, char* campo, char* valor) {
     Registro_PTR reg;
     FILE* file_bin = fopen(nome_bin, "rb");
     if(!file_bin)
         printf("Falha no processamento do arquivo.");
     int aux, i = 0;
+    bool cond;
+    bool achou = false;;
 
     fseek(file_bin, TAM_CAB, SEEK_CUR);
-    if(RRN != TODOS) {
+    if(RRN >= 0) {                                                      //BUSCA POR RRN
         reg = (Registro_PTR) calloc(1, sizeof(Registro));
         fseek(file_bin, RRN*TAM_REG, SEEK_CUR);
         aux = ler_reg(file_bin, reg);
-        if(aux == OK)
+        if(aux == OK && reg->UF_orig[0] != REMOVIDO) {
             exibe_reg(RRN, reg);
-        else if(aux == ERRO)
-            printf("Registro inexistente.");
+            achou = true;
+        }
         free(reg);
-    } else if(RRN == TODOS) {
+    } else if(RRN == TODOS || RRN == FILTRO) {
         while(true) {
+
             reg = (Registro_PTR) calloc(1, sizeof(Registro));
             aux = ler_reg(file_bin, reg);
-            if(aux == ERRO) {
+            if(aux == ERRO){
+                free(reg);
                 break;
             }
-            exibe_reg(i++, reg);
+
+            if(RRN == FILTRO) {                                         //BUSCA POR FILTRO
+                cond = (!strcmp(campo, UF_DEST) && !strcmp(reg->UF_dest, valor)) ||
+                       (!strcmp(campo, UF_ORIG) && !strcmp(reg->UF_orig, valor)) ||
+                       (!strcmp(campo, DISTANCIA) && reg->distancia == atoi(valor)) ||
+                       (!strcmp(campo, TEMPO) && !strcmp(reg->tempo, valor)) ||
+                       (!strcmp(campo, CIDADE_ORIG) && !strcmp(reg->cidade_orig, valor)) ||
+                       (!strcmp(campo, CIDADE_DEST) && !strcmp(reg->cidade_dest, valor));
+                if(cond && reg->UF_orig[0] != REMOVIDO) {
+                    exibe_reg(i, reg);
+                    achou = true;
+                }
+
+            } else if(RRN == TODOS && reg->UF_orig[0] != REMOVIDO) {    //ALL
+                exibe_reg(i, reg);
+                achou = true;
+            }
+            i++;
             free(reg);
+
         }
+    }
+    if(!achou) {
+        printf("Registro inexistente.");
     }
     fclose(file_bin);
 }
@@ -529,4 +566,96 @@ void escrever_cabecalho(FILE* file_bin, Cabecalho_PTR cab) {
     fwrite(&cab->numeroVertices, sizeof(int), 1, file_bin);
     fwrite(&cab->numeroArestas, sizeof(int), 1, file_bin);
     fwrite(cab->dataUltimaCompactacao, 10 * sizeof(char), 1, file_bin);
+}
+
+void remove_reg_filtro(char* nome_file_bin, int qtd_it) {
+    FILE* file_bin = fopen(nome_file_bin, "rb+");
+    if(!file_bin) {
+        printf("Falha no processamento do arquivo.");
+        return;
+    }
+
+    char apagar = REMOVIDO;
+    bool cond;
+    int aux;
+    char campo[50];
+    char valor[50];
+    Cabecalho_PTR cab;
+    Registro_PTR reg;
+    ListaArestaVertice_PTR lista;
+
+    rewind(file_bin);
+    cab = (Cabecalho_PTR) calloc(1, sizeof(Cabecalho));
+    fwrite(&cab->status, sizeof(char), 1, file_bin);
+    fseek(file_bin, 2 * sizeof(int), SEEK_CUR);
+    fread(cab->dataUltimaCompactacao, 10 * sizeof(char), 1, file_bin);
+
+    for(int i = 0; i < qtd_it; i++) {
+        fscanf(stdin, "%s", campo);
+        scan_quote_string(valor);
+        fgetc(stdin);
+
+        while(true) {
+            reg = (Registro_PTR) calloc(1, sizeof(Registro));
+            aux = ler_reg(file_bin, reg);
+            if(aux == ERRO) {
+                free(reg);
+                break;
+            }
+            if(reg->UF_orig[0] == REMOVIDO) {
+                free(reg);
+                continue;
+            }
+
+            cond = (!strcmp(campo, UF_DEST) && !strcmp(reg->UF_dest, valor)) ||
+                   (!strcmp(campo, UF_ORIG) && !strcmp(reg->UF_orig, valor)) ||
+                   (!strcmp(campo, DISTANCIA) && reg->distancia == atoi(valor)) ||
+                   (!strcmp(campo, TEMPO) && !strcmp(reg->tempo, valor)) ||
+                   (!strcmp(campo, CIDADE_ORIG) && !strcmp(reg->cidade_orig, valor)) ||
+                   (!strcmp(campo, CIDADE_DEST) && !strcmp(reg->cidade_dest, valor));
+            if(cond) {
+                fseek(file_bin, -(TAM_REG), SEEK_CUR);
+                fwrite(&apagar, sizeof(char), 1, file_bin);
+                fseek(file_bin, (TAM_REG-1), SEEK_CUR);
+            }
+            free(reg);
+        }
+    }
+
+    //Contar Vertices e Arestas
+    lista = (ListaArestaVertice_PTR) calloc(1, sizeof(ListaArestaVertice));
+    atualizar_arq_vertice(file_bin, lista);
+
+    //Reescrever cabecalho
+    rewind (file_bin);
+    cab->status = STATUS_OK;
+    cab->numeroVertices = lista->numeroVertices;
+    cab->numeroArestas = lista->numeroArestas;
+    free(lista);
+    escrever_cabecalho(file_bin, cab);
+    free(cab);
+
+    free(cab);
+    fclose(file_bin);
+}
+
+void scan_quote_string(char *str) {
+    char R;
+    while((R = getchar()) != EOF && isspace(R)); // ignorar espaços, \r, \n...
+    if(R == 'N' || R == 'n') { // campo NULO
+        getchar();
+        getchar();
+        getchar(); // ignorar o "ULO" de NULO.
+        strcpy(str, ""); // copia string vazia
+    } else if(R == '\"') {
+        if(scanf("%[^\"]", str) != 1) { // ler até o fechamento das aspas
+            strcpy(str, "");
+        }
+        getchar(); // ignorar aspas fechando
+    } else if(R != EOF) { // vc tá tentando ler uma string que não tá entre aspas! Fazer leitura normal %s então...
+        str[0] = R;
+        scanf("%s", &str[1]);
+    } else { // EOF
+        strcpy(str, "");
+    }
 }
