@@ -16,6 +16,7 @@
 #define REMOVIDO '*'
 #define TODOS -1
 #define FILTRO -2
+#define VAZIO ""
 
 #define UF_ORIG "estadoOrigem"
 #define UF_DEST "estadoDestino"
@@ -116,7 +117,6 @@ int main() {
         fscanf(stdin, "%s", param_1);
         fscanf(stdin, "%s", param_2);
         scan_quote_string(param_3);
-        fgetc(stdin);
 
         exibir_bin(param_1, FILTRO, param_2, param_3);
         break;
@@ -233,9 +233,18 @@ void exibir_bin(char* nome_bin, int RRN, char* campo, char* valor) {
     int aux, i = 0;
     bool cond;
     bool achou = false;;
+    char status;
 
-    //Pulando cabecalho arquivo.BIN
-    fseek(file_bin, TAM_CAB, SEEK_CUR);
+    rewind(file_bin);
+    fread(&status, sizeof(char), 1, file_bin);
+    if(status != STATUS_OK){
+        printf("Falha no processamento do arquivo.");
+        return;
+    }
+
+    //Pulando restante do cabecalho arquivo.BIN
+    fseek(file_bin, TAM_CAB-1, SEEK_CUR);
+
     if(RRN >= 0) {                                                      //BUSCA POR RRN
 
         reg = (Registro_PTR) calloc(1, sizeof(Registro));
@@ -262,7 +271,7 @@ void exibir_bin(char* nome_bin, int RRN, char* campo, char* valor) {
 
                 cond = (!strcmp(campo, UF_DEST) && !strcmp(reg->UF_dest, valor)) ||
                        (!strcmp(campo, UF_ORIG) && !strcmp(reg->UF_orig, valor)) ||
-                       (!strcmp(campo, DISTANCIA) && reg->distancia == atoi(valor)) ||
+                       (!strcmp(campo, DISTANCIA) && strcmp(valor, VAZIO) && reg->distancia == atoi(valor)) ||
                        (!strcmp(campo, TEMPO) && !strcmp(reg->tempo, valor)) ||
                        (!strcmp(campo, CIDADE_ORIG) && !strcmp(reg->cidade_orig, valor)) ||
                        (!strcmp(campo, CIDADE_DEST) && !strcmp(reg->cidade_dest, valor));
@@ -296,6 +305,7 @@ void remove_reg_filtro(char* nome_file_bin, int qtd_it) {
         return;
     }
 
+    char status;
     bool cond;
     int aux;
     char campo[50];
@@ -303,6 +313,13 @@ void remove_reg_filtro(char* nome_file_bin, int qtd_it) {
     Cabecalho_PTR cab;
     Registro_PTR reg;
     ListaArestaVertice_PTR lista;
+
+    rewind(file_bin);
+    fread(&status, sizeof(char), 1, file_bin);
+    if(status != STATUS_OK){
+        printf("Falha no processamento do arquivo.");
+        return;
+    }
 
     //Escrever cabecalho arquivo.BIN
     rewind(file_bin);
@@ -315,7 +332,6 @@ void remove_reg_filtro(char* nome_file_bin, int qtd_it) {
     for(int i = 0; i < qtd_it; i++) {
         fscanf(stdin, "%s", campo);
         scan_quote_string(valor);
-        fgetc(stdin);
 
         while(true) {
             reg = (Registro_PTR) calloc(1, sizeof(Registro));
@@ -335,7 +351,7 @@ void remove_reg_filtro(char* nome_file_bin, int qtd_it) {
 
             cond = (!strcmp(campo, UF_DEST) && !strcmp(reg->UF_dest, valor)) ||
                    (!strcmp(campo, UF_ORIG) && !strcmp(reg->UF_orig, valor)) ||
-                   (!strcmp(campo, DISTANCIA) && reg->distancia == atoi(valor)) ||
+                   (!strcmp(campo, DISTANCIA) && strcmp(valor, VAZIO) && reg->distancia == atoi(valor)) ||
                    (!strcmp(campo, TEMPO) && !strcmp(reg->tempo, valor)) ||
                    (!strcmp(campo, CIDADE_ORIG) && !strcmp(reg->cidade_orig, valor)) ||
                    (!strcmp(campo, CIDADE_DEST) && !strcmp(reg->cidade_dest, valor));
@@ -363,9 +379,7 @@ void remove_reg_filtro(char* nome_file_bin, int qtd_it) {
     escrever_cabecalho(file_bin, cab);
     free(cab);
 
-    free(cab);
     fclose(file_bin);
-
     binarioNaTela1(nome_file_bin);
 }
 
@@ -377,10 +391,18 @@ void inserir_reg(char* nome_file_bin, int qtd_inserir){
         return;
     }
 
+    char status;
     char c;
     Cabecalho_PTR cab;
     Registro_PTR reg;
     ListaArestaVertice_PTR lista;
+
+    rewind(file_bin);
+    fread(&status, sizeof(char), 1, file_bin);
+    if(status != STATUS_OK){
+        printf("Falha no processamento do arquivo.");
+        return;
+    }
 
     //Escrevendo cabecalho .BIN
     rewind(file_bin);
@@ -397,11 +419,13 @@ void inserir_reg(char* nome_file_bin, int qtd_inserir){
         scan_quote_string(reg->cidade_orig);
         scan_quote_string(reg->cidade_dest);
         scan_quote_string(reg->tempo);
-        fgetc(stdin);
 
         //Procurando registros removidos
-        while((c = fgetc(file_bin)) != REMOVIDO)
+        c = fgetc(file_bin);
+        while(c != REMOVIDO && c != EOF){
             fseek(file_bin, TAM_REG-1, SEEK_CUR);
+            c = fgetc(file_bin);
+        }
         fseek(file_bin, -1, SEEK_CUR);
 
         //Salvando novo registro
@@ -423,7 +447,6 @@ void inserir_reg(char* nome_file_bin, int qtd_inserir){
     free(cab);
 
     fclose(file_bin);
-
     binarioNaTela1(nome_file_bin);
 }
 
@@ -437,11 +460,18 @@ void atualizar_campo_registro(char* nome_file, int qtd_atualizacoes) {
     int RRN;
     char campo[50];
     char valor[50];
-
+    char status;
     ListaArestaVertice_PTR lista;
     Registro_PTR reg;
     Cabecalho_PTR cab;
     int aux;
+
+    rewind(file_bin);
+    fread(&status, sizeof(char), 1, file_bin);
+    if(status != STATUS_OK){
+        printf("Falha no processamento do arquivo.");
+        return;
+    }
 
     //Escrevendo cabecalho .BIN
     rewind(file_bin);
@@ -454,7 +484,6 @@ void atualizar_campo_registro(char* nome_file, int qtd_atualizacoes) {
         fscanf(stdin, "%d", &RRN);
         fscanf(stdin, "%s", campo);
         scan_quote_string(valor);
-        fgetc(stdin);
 
         rewind(file_bin);
         fseek(file_bin, TAM_CAB, SEEK_CUR);
@@ -515,14 +544,21 @@ void compact(char* nome_file_orig, char* nome_file_compac) {
         return;
     }
 
+    char status;
     char* data;
     int aux;
     Registro_PTR reg;
     Cabecalho_PTR cab;
 
-    cab = (Cabecalho_PTR) calloc(1, sizeof(Cabecalho));
+    rewind(file_bin);
+    fread(&status, sizeof(char), 1, file_bin);
+    if(status != STATUS_OK){
+        printf("Falha no carregamento do arquivo.");
+        return;
+    }
 
     //Lendo cabecalho arquivo.BIN
+    cab = (Cabecalho_PTR) calloc(1, sizeof(Cabecalho));
     rewind(file_bin);
     fseek(file_bin, 1, SEEK_CUR);
     fread(&cab->numeroVertices, sizeof(int), 1, file_bin);
@@ -589,10 +625,9 @@ int salvar_reg_bin(FILE* file_bin, Registro_PTR reg) {
     fwrite(reg->cidade_dest, tam_cidade_dest * sizeof(char), 1, file_bin); fputc('|', file_bin);
     fwrite(reg->tempo, tam_tempo * sizeof(char), 1, file_bin);             fputc('|', file_bin);
 
-    while(tam_lixo > 0) {
+    for(int i = 0; i < tam_lixo; i++)
         fputc('#', file_bin);
-        tam_lixo--;
-    }
+
     return OK;
 }
 
@@ -667,9 +702,10 @@ void atualizar_arq_vertice(FILE* file_bin, ListaArestaVertice_PTR lista) {
         fseek(file_bin, TAM_CAMPO_FIXO - 1, SEEK_CUR); //Pula os campos fixos - 1, pois ja esta lendo um caracter pra ver se foi removido
         campo_var = (char*) calloc(TAM_REG, sizeof(char));
         aux = fread(campo_var, (TAM_REG - TAM_CAMPO_FIXO)*sizeof(char), 1, file_bin); //Le todo conteudo de campo variavel
-        if(!aux) //Se nao leu acabou arquivo
+        if(!aux){   //Se nao leu acabou arquivo
+            free(campo_var);
             break;
-
+        }
         lista->numeroArestas++;
 
         //Add cidade_orig aos vertices

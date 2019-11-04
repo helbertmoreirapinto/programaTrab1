@@ -1,4 +1,5 @@
 all:
-gcc -o programaTrab1 *.c
+	gcc main.c -o programaTrab1
+
 run:
-./programaTrab1
+	./programaTrab1
