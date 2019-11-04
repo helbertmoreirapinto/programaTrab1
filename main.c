@@ -70,17 +70,17 @@ typedef ListaArestaVertice* ListaArestaVertice_PTR;
 
 /* Prototipos de funcoes */
 void transfere_dados_csv_bin(char*, char*);
-Registro_PTR ler_reg_csv(char, FILE*);
-int salvar_registro(FILE*, Registro_PTR);
-void limpar_memoria(Registro_PTR);
+void ler_reg_csv(char, FILE*, Registro_PTR);
+int salvar_reg_bin(FILE*, Registro_PTR);
 void atualizar_arq_vertice(FILE*, ListaArestaVertice_PTR);
-char* get_data_sistema_formatada();
+void get_data_sistema_formatada(char*);
 void exibir_bin(char*, int);
 void exibe_reg(int, Registro_PTR);
 int ler_reg(FILE*, Registro_PTR);
 void compact(char*, char*);
 void atualizar_campo_registro(char*, int);
 void inserir_aresta(ListaArestaVertice_PTR, char*);
+void escrever_cabecalho(FILE*, Cabecalho_PTR);
 
 int main() {
     int operacao;
@@ -177,22 +177,20 @@ void transfere_dados_csv_bin(char* nome_csv, char* nome_bin) {
     fgetc(file_csv);
 
     //Escrevendo cabecalho .BIN
-    cab = calloc(1, sizeof(Cabecalho));
-    fwrite(&cab->status, sizeof(char), 1, file_bin);
-    fwrite(&cab->numeroVertices, sizeof(int), 1, file_bin);
-    fwrite(&cab->numeroArestas, sizeof(int), 1, file_bin);
-    fwrite(cab->dataUltimaCompactacao, 10 * sizeof(char), 1, file_bin);
+    cab = (Cabecalho_PTR) calloc(1, sizeof(Cabecalho));
+    escrever_cabecalho(file_bin, cab);
 
     //LE(.CSV) e SALVA(.BIN) um registro por vez
     char c;
     while((c = fgetc(file_csv)) != EOF) {
-        reg = ler_reg_csv(c, file_csv);
-        salvar_registro(file_bin, reg);
+        reg = (Registro_PTR) calloc(1, sizeof(Registro));
+        ler_reg_csv(c, file_csv, reg);
+        salvar_reg_bin(file_bin, reg);
         free(reg);
     }
 
     //Contar Vertices e Arestas
-    lista = calloc(1, sizeof(ListaArestaVertice));
+    lista = (ListaArestaVertice_PTR) calloc(1, sizeof(ListaArestaVertice));
     atualizar_arq_vertice(file_bin, lista);
 
     //Reescrever cabecalho
@@ -200,13 +198,13 @@ void transfere_dados_csv_bin(char* nome_csv, char* nome_bin) {
     cab->status = STATUS_OK;
     cab->numeroVertices = lista->numeroVertices;
     cab->numeroArestas = lista->numeroArestas;
-    data = get_data_sistema_formatada();
+    data = (char*) calloc(11, sizeof(char));
+    get_data_sistema_formatada(data);
     strcpy(cab->dataUltimaCompactacao, data);
     free(data);
-    fwrite(&cab->status, sizeof(char), 1, file_bin);
-    fwrite(&cab->numeroVertices, sizeof(int), 1, file_bin);
-    fwrite(&cab->numeroArestas, sizeof(int), 1, file_bin);
-    fwrite(cab->dataUltimaCompactacao, 10 * sizeof(char), 1, file_bin);
+    free(lista);
+    escrever_cabecalho(file_bin, cab);
+    free(cab);
 
     fclose(file_csv);
     fclose(file_bin);
@@ -234,7 +232,7 @@ void atualizar_arq_vertice(FILE* file_bin, ListaArestaVertice_PTR lista) {
             continue;
 
         fseek(file_bin, TAM_CAMPO_FIXO - 1, SEEK_CUR); //Pula os campos fixos - 1, pois ja esta lendo um caracter pra ver se foi removido
-        campo_var = calloc(TAM_REG, sizeof(char));
+        campo_var = (char*) calloc(TAM_REG, sizeof(char));
         aux = fread(campo_var, (TAM_REG - TAM_CAMPO_FIXO)*sizeof(char), 1, file_bin); //Le todo conteudo de campo variavel
         if(!aux) //Se nao leu acabou arquivo
             break;
@@ -258,7 +256,7 @@ void atualizar_arq_vertice(FILE* file_bin, ListaArestaVertice_PTR lista) {
         free(campo_var);
     }
 
-    //Salva no arquivo os dados contidos na lista ordenada
+    //Salvar no arquivo os dados contidos na lista de vertices ordenada
     for(int i  = 0; i < lista->numeroVertices; i++) {
         fwrite(lista->lista_vertice[i]->nome_vertice, 20 * sizeof(char), 1, file_vert);
         fwrite(&lista->lista_vertice[i]->qtd_rep, sizeof(int), 1, file_vert);
@@ -305,7 +303,7 @@ void inserir_aresta(ListaArestaVertice_PTR lista, char* cidade) {
 }
 
 void atualizar_campo_registro(char* nome_file, int qtd_atualizacoes) {
-    FILE* file_bin = fopen(nome_file, "ab+");
+    FILE* file_bin = fopen(nome_file, "rb+");
     if(!file_bin) {
         printf("ERRO");
         return;
@@ -314,13 +312,16 @@ void atualizar_campo_registro(char* nome_file, int qtd_atualizacoes) {
     char campo[50];
     char valor[50];
 
+    ListaArestaVertice_PTR lista;
     Registro_PTR reg;
     Cabecalho_PTR cab;
     int aux;
     //Escrevendo cabecalho .BIN
     rewind(file_bin);
-    cab = calloc(1, sizeof(Cabecalho));
+    cab = (Cabecalho_PTR) calloc(1, sizeof(Cabecalho));
     fwrite(&cab->status, sizeof(char), 1, file_bin);
+    fseek(file_bin, 2 * sizeof(int), SEEK_CUR);
+    fread(cab->dataUltimaCompactacao, 10 * sizeof(char), 1, file_bin);
 
     for(int i = 0; i < qtd_atualizacoes; i++) {
         fscanf(stdin, "%d", &RRN);
@@ -332,9 +333,9 @@ void atualizar_campo_registro(char* nome_file, int qtd_atualizacoes) {
         fseek(file_bin, TAM_CAB, SEEK_CUR);
         fseek(file_bin, RRN*TAM_REG, SEEK_CUR);
 
-        reg = calloc(1, sizeof(Registro));
+        reg = (Registro_PTR) calloc(1, sizeof(Registro));
         aux = ler_reg(file_bin, reg);
-        if(!aux)
+        if(aux == ERRO)
             continue;
 
         if(!strcmp(campo, UF_DEST)) {
@@ -350,36 +351,89 @@ void atualizar_campo_registro(char* nome_file, int qtd_atualizacoes) {
         } else if(!strcmp(campo, CIDADE_DEST)) {
             strcpy(reg->cidade_dest, valor);
         }
-        //Salvar registro no RRN
+        fseek(file_bin, -(TAM_REG), SEEK_CUR);
+        salvar_reg_bin(file_bin, reg);
+        fread(reg);
     }
+
+    //Contar Vertices e Arestas
+    lista = (ListaArestaVertice_PTR) calloc(1, sizeof(ListaArestaVertice));
+    atualizar_arq_vertice(file_bin, lista);
+
+    //Reescrever cabecalho
+    rewind (file_bin);
+    cab->status = STATUS_OK;
+    cab->numeroVertices = lista->numeroVertices;
+    cab->numeroArestas = lista->numeroArestas;
+    free(lista);
+    escrever_cabecalho(file_bin, cab);
+    free(cab);
 
     fclose(file_bin);
 }
 
 void compact(char* nome_file_orig, char* nome_file_compac) {
+    FILE* file_bin = fopen(nome_file_orig, "rb");
+    FILE* file_bin_compac = fopen(nome_file_compac, "wb");
+    if(!file_bin || file_bin_compac) {
+        printf("ERRO");
+        return;
+    }
+
+    char* data;
+    int aux;
+    Registro_PTR reg;
+    Cabecalho_PTR cab;
+
+    cab = (Cabecalho_PTR) calloc(1, sizeof(Cabecalho));
+
+    rewind(file_bin);
+    fseek(file_bin, 1, SEEK_CUR);
+    fread(&cab->numeroVertices, sizeof(int), 1, file_bin);
+    fread(&cab->numeroArestas, sizeof(int), 1, file_bin);
+    fread(cab->dataUltimaCompactacao, 10 * sizeof(char), 1, file_bin);
+
+    escrever_cabecalho(file_bin_compac, cab);
+
+    while(true) {
+        reg = (Registro_PTR) calloc(1, sizeof(Registro));
+        aux = ler_reg(file_bin, reg);
+        if(aux == ERRO)
+            break;
+        if(reg->UF_orig[0] == '*')
+            continue;
+        salvar_reg_bin(file_bin_compac, reg);
+        free(reg);
+    }
+
+    cab->status = STATUS_OK;
+    data = (char*) calloc(11, sizeof(char));
+    get_data_sistema_formatada(data);
+    strcpy(cab->dataUltimaCompactacao, data);
+    free(data);
+    escrever_cabecalho(file_bin_compac, cab);
+    free(cab);
+
+    fclose(file_bin);
+    fclose(file_bin_compac);
 }
 
-char* get_data_sistema_formatada() {
-    char* data = (char*) calloc(11, sizeof(char));
+void get_data_sistema_formatada(char* data) {
     time_t mytime;
     mytime = time(NULL);
     struct tm tm = *localtime(&mytime);
     tm.tm_mon += 1;
     tm.tm_year += 1900;
     snprintf(data, 11, "%02d/%02d/%04d", tm.tm_mday, tm.tm_mon, tm.tm_year);
-    return data;
 }
 
-Registro_PTR ler_reg_csv(char c, FILE* file_csv) {
-    Registro_PTR reg = (Registro_PTR)calloc(1, sizeof(Registro));
+Registro_PTR ler_reg_csv(char c, FILE* file_csv, Registro_PTR reg) {
     reg->UF_orig[0] = c;
     fscanf(file_csv, "%c %*c %[^,] %*c %d %*c %[^,] %*c %[^,] %*c%[^\n]*c", &reg->UF_orig[1], reg->UF_dest, &reg->distancia, reg->cidade_orig, reg->cidade_dest, reg->tempo);
     fgetc(file_csv);
-
-    return reg;
 }
 
-int salvar_registro(FILE* file_bin, Registro_PTR reg) {
+int salvar_reg_bin(FILE* file_bin, Registro_PTR reg) {
     int tam_cidade_orig = strlen(reg->cidade_orig);
     int tam_cidade_dest = strlen(reg->cidade_dest);
     int tam_tempo = strlen(reg->tempo);
@@ -390,12 +444,9 @@ int salvar_registro(FILE* file_bin, Registro_PTR reg) {
     fwrite(reg->UF_orig, 2*sizeof(char), 1, file_bin);
     fwrite(reg->UF_dest, 2*sizeof(char), 1, file_bin);
     fwrite(&reg->distancia, sizeof(int), 1, file_bin);
-    fwrite(reg->cidade_orig, tam_cidade_orig * sizeof(char), 1, file_bin);
-    fputc('|', file_bin);
-    fwrite(reg->cidade_dest, tam_cidade_dest * sizeof(char), 1, file_bin);
-    fputc('|', file_bin);
-    fwrite(reg->tempo, tam_tempo * sizeof(char), 1, file_bin);
-    fputc('|', file_bin);
+    fwrite(reg->cidade_orig, tam_cidade_orig * sizeof(char), 1, file_bin); fputc('|', file_bin);
+    fwrite(reg->cidade_dest, tam_cidade_dest * sizeof(char), 1, file_bin); fputc('|', file_bin);
+    fwrite(reg->tempo, tam_tempo * sizeof(char), 1, file_bin);             fputc('|', file_bin);
 
     while(tam_lixo > 0) {
         fputc('#', file_bin);
@@ -438,14 +489,16 @@ void exibir_bin(char* nome_bin, int RRN) {
 int ler_reg(FILE* file_bin, Registro_PTR reg) {
     int tam_cidade_orig, tam_cidade_dest, tam_tempo;
     int aux;
-    char* aux_campos = calloc(TAM_REG, sizeof(char));
+    char* aux_campos;
 
     aux = fread(reg->UF_orig, 2*sizeof(char), 1, file_bin);
     aux = fread(reg->UF_dest, 2*sizeof(char), 1, file_bin);
     aux = fread(&reg->distancia, sizeof(int), 1, file_bin);
-    aux = fread(aux_campos, (TAM_REG - TAM_CAMPO_FIXO)*sizeof(char), 1, file_bin);
     if(!aux)
         return ERRO;
+
+    aux_campos = (char*) calloc(TAM_REG, sizeof(char));
+    aux = fread(aux_campos, (TAM_REG - TAM_CAMPO_FIXO)*sizeof(char), 1, file_bin);
 
     tam_cidade_orig = strcspn(&aux_campos[0], "|");
     tam_cidade_dest = strcspn(&aux_campos[tam_cidade_orig+1], "|");
@@ -453,7 +506,8 @@ int ler_reg(FILE* file_bin, Registro_PTR reg) {
 
     strncpy(reg->cidade_orig, &aux_campos[0], tam_cidade_orig);
     strncpy(reg->cidade_dest, &aux_campos[tam_cidade_orig+1], tam_cidade_dest);
-    strncpy(reg->tempo, &aux_campos[tam_cidade_orig+1+tam_cidade_dest+1], tam_tempo);
+    strncpy(reg->tempo, &aux_campos[tam_cidade_orig+tam_cidade_dest+2], tam_tempo);
+
     free(aux_campos);
     return OK;
 }
@@ -468,4 +522,11 @@ void exibe_reg(int RRN, Registro_PTR reg) {
     if(strcmp(reg->tempo, ""))
         printf(" %s", reg->tempo);
     printf("\n");
+}
+
+void escrever_cabecalho(FILE* file_bin, Cabecalho_PTR cab) {
+    fwrite(&cab->status, sizeof(char), 1, file_bin);
+    fwrite(&cab->numeroVertices, sizeof(int), 1, file_bin);
+    fwrite(&cab->numeroArestas, sizeof(int), 1, file_bin);
+    fwrite(cab->dataUltimaCompactacao, 10 * sizeof(char), 1, file_bin);
 }
