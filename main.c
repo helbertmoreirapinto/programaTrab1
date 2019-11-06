@@ -709,7 +709,6 @@ void atualizar_arq_vertice(FILE* file_bin, ListaArestaVertice_PTR lista) {
             fseek(file_bin, TAM_REG - 1, SEEK_CUR);
             continue;
         }else if(c == EOF){   //Fim do arquivo
-            free(campo_var);
             break;
         }
         fseek(file_bin, TAM_CAMPO_FIXO - 1, SEEK_CUR);      //Pula os campos fixos - 1, pois ja esta lendo um caracter pra ver se foi removido
