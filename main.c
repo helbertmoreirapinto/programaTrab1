@@ -390,7 +390,6 @@ void inserir_reg(char* nome_file_bin, int qtd_inserir){
         return;
     }
 
-    bool fim;       //Variavel para verificar se vai inserir no fim do arquivo
     char c;
     Cabecalho_PTR cab;
     Registro_PTR reg;
@@ -418,25 +417,12 @@ void inserir_reg(char* nome_file_bin, int qtd_inserir){
         scan_quote_string(reg->cidade_orig);
         scan_quote_string(reg->cidade_dest);
         scan_quote_string(reg->tempo);
-        fim = false;
 
-        //Procurando registros removidos
-        rewind(file_bin);                   //Indo para o inicio do arquivo
-        fseek(file_bin, TAM_CAB, SEEK_CUR); //Pulando cabecalho
-        c = fgetc(file_bin);
-        while(c != REMOVIDO){               //Encontrando espacos de registros removidos
-            fseek(file_bin, TAM_REG-1, SEEK_CUR);
-            c = fgetc(file_bin);
-            if(c == EOF){                   //Nao achou, insere no fim
-                fim = true;
-                break;
-            }
-        }
-        if(!fim)
-            fseek(file_bin, -1, SEEK_CUR);
+        //Insercao estatica = no fim do arquivo
+        fseek(file_bin, 0, SEEK_END);       //Pulando para o fim do arquivo
 
         //Salvando novo registro
-        salvar_reg_bin(file_bin, reg, fim); //Salvando registro
+        salvar_reg_bin(file_bin, reg, true); //Salvando registro
         free(reg);
     }
 
