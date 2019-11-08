@@ -204,15 +204,14 @@ void transfere_dados_csv_bin(char* nome_csv, char* nome_bin) {
     escrever_cabecalho(file_bin, cab);
 
     //Ler registro no arquivo.CSV e salvar arquivo.BIN. Um registro por vez.
-    reg = (Registro_PTR) calloc(1, sizeof(Registro));
-    while(fscanf(file_csv, "%[^,] %*c %[^,] %*c %d %*c %[^,] %*c %[^,] %*c%[^\n]*c", reg->UF_orig, reg->UF_dest, &reg->distancia, reg->cidade_orig, reg->cidade_dest, reg->tempo)) {
+    while(true) {
+        reg = (Registro_PTR) calloc(1, sizeof(Registro));
+        fscanf(file_csv, "%[^,] %*c %[^,] %*c %d %*c %[^,] %*c %[^,] %*c%[^\n]*c", reg->UF_orig, reg->UF_dest, &reg->distancia, reg->cidade_orig, reg->cidade_dest, reg->tempo);
         if(reg->UF_orig[0] < 'A' || reg->UF_orig[0] > 'Z') break; //Como estado origem nao pode ser nulo, se a primeira letra nao estiver no range e pq acabou o arquivo.
         fgetc(file_csv);
         salvar_reg_bin(file_bin, reg, true);
         free(reg);
-        reg = (Registro_PTR) calloc(1, sizeof(Registro));
     }
-    free(reg);
 
     //Contar Vertices e Arestas e reescrever cabecalho com dados computados.
     lista = (ListaArestaVertice_PTR) calloc(1, sizeof(ListaArestaVertice));
