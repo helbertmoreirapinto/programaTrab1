@@ -14,6 +14,7 @@
 #include <stdbool.h>
 #include <time.h>
 
+
 /** Define's de Tamanho */
 #define TAM_REG 85
 #define TAM_CAB 19
@@ -46,6 +47,7 @@
 #define TODOS -1
 #define FILTRO -2
 #define VAZIO ""
+
 
 /** Struct de Cabecalho */
 typedef struct {
@@ -86,7 +88,7 @@ typedef ListaArestaVertice* ListaArestaVertice_PTR;
 
 
 /** Prototipos de funcoes */
-void atualizar_arq_vertice(FILE*, ListaArestaVertice_PTR);
+void atualizar_cabecalho(FILE*, ListaArestaVertice_PTR, Cabecalho_PTR);
 void inserir_aresta(ListaArestaVertice_PTR, char*);
 int salvar_reg_bin(FILE*, Registro_PTR, bool);
 void escrever_cabecalho(FILE*, Cabecalho_PTR);
@@ -105,8 +107,7 @@ void binarioNaTela1(char*);
 
 /** Funcao principal */
 int main() {
-    int funcao;
-    int param;
+    int funcao, param;
     char param_1[50], param_2[50], param_3[50];
 
     fscanf(stdin, "%d", &funcao);
@@ -176,9 +177,8 @@ int main() {
         break;
 
     default:
-        printf("Erro no operador Funcao\n");
+        printf("Erro no operador de funcao\n");
     }
-
     return 0;
 }
 
@@ -190,6 +190,7 @@ void transfere_dados_csv_bin(char* nome_csv, char* nome_bin) {
         printf("Falha no carregamento do arquivo.");
         return;
     }
+
     ListaArestaVertice_PTR lista;
     Cabecalho_PTR cab;
     Registro_PTR reg;
@@ -203,27 +204,21 @@ void transfere_dados_csv_bin(char* nome_csv, char* nome_bin) {
     escrever_cabecalho(file_bin, cab);
 
     //Ler registro no arquivo.CSV e salvar arquivo.BIN. Um registro por vez.
-    char c;
-    while((c = fgetc(file_csv)) != EOF) {
-        reg = (Registro_PTR) calloc(1, sizeof(Registro));
-        reg->UF_orig[0] = c;
-        fscanf(file_csv, "%c %*c %[^,] %*c %d %*c %[^,] %*c %[^,] %*c%[^\n]*c", &reg->UF_orig[1], reg->UF_dest, &reg->distancia, reg->cidade_orig, reg->cidade_dest, reg->tempo);
+    reg = (Registro_PTR) calloc(1, sizeof(Registro));
+    while(fscanf(file_csv, "%[^,] %*c %[^,] %*c %d %*c %[^,] %*c %[^,] %*c%[^\n]*c", reg->UF_orig, reg->UF_dest, &reg->distancia, reg->cidade_orig, reg->cidade_dest, reg->tempo)) {
+        if(reg->UF_orig[0] < 'A' || reg->UF_orig[0] > 'Z') break; //Como estado origem nao pode ser nulo, se a primeira letra nao estiver no range e pq acabou o arquivo.
         fgetc(file_csv);
         salvar_reg_bin(file_bin, reg, true);
         free(reg);
+        reg = (Registro_PTR) calloc(1, sizeof(Registro));
     }
+    free(reg);
 
-    //Contar Vertices e Arestas.
+    //Contar Vertices e Arestas e reescrever cabecalho com dados computados.
     lista = (ListaArestaVertice_PTR) calloc(1, sizeof(ListaArestaVertice));
-    atualizar_arq_vertice(file_bin, lista);
-
-    //Reescrever cabecalho com dados computados.
-    cab->status = STATUS_OK;
-    cab->numeroVertices = lista->numeroVertices;
-    cab->numeroArestas = lista->numeroArestas;
     strcpy(cab->dataUltimaCompactacao, "##########");
+    atualizar_cabecalho(file_bin, lista, cab);
     free(lista);
-    escrever_cabecalho(file_bin, cab);
     free(cab);
 
     fclose(file_csv);
@@ -236,7 +231,9 @@ void transfere_dados_csv_bin(char* nome_csv, char* nome_bin) {
 /** FUNC[4] - Resgatar registros arquivo.BIN com filtro por RRN             */
 void exibir_bin(char* nome_bin, int RRN, char* campo, char* valor) {
     FILE* file_bin = fopen(nome_bin, "rb"); //Abre arquivo.BIN para leitura.
-    if(!file_bin){
+
+    //Verificar existencia e integridade do arquivo
+    if(!file_bin || !arquivo_integro(file_bin)){
         printf("Falha no processamento do arquivo.");
         return;
     }
@@ -244,12 +241,6 @@ void exibir_bin(char* nome_bin, int RRN, char* campo, char* valor) {
     Registro_PTR reg;
     int aux, i = 0;
     bool cond, achou = false;
-
-    //Verificar integridade do arquivo
-    if(!arquivo_integro(file_bin)){
-        printf("Falha no processamento do arquivo.");
-        return;
-    }
 
     //Pulando restante do cabecalho arquivo.BIN
     fseek(file_bin, TAM_CAB-1, SEEK_CUR);
@@ -299,14 +290,15 @@ void exibir_bin(char* nome_bin, int RRN, char* campo, char* valor) {
 
     if(!achou)          //Se nao exibiu nenhum registro, exibir mensagem de registro inexistente.
         printf("Registro inexistente.");
-
     fclose(file_bin);
 }
 
 /** FUNC[5] - Remover registros arquivos.BIN com filtro de valor de campo */
 void remove_reg_filtro(char* nome_file_bin, int qtd_it) {
     FILE* file_bin = fopen(nome_file_bin, "rb+");   //Abre arquivo.BIN para leitura/escrita.
-    if(!file_bin) {
+
+    //Verificar existencia e integridade do arquivo
+    if(!file_bin || !arquivo_integro(file_bin)) {
         printf("Falha no processamento do arquivo.");
         return;
     }
@@ -317,12 +309,6 @@ void remove_reg_filtro(char* nome_file_bin, int qtd_it) {
     Cabecalho_PTR cab;
     Registro_PTR reg;
     ListaArestaVertice_PTR lista;
-
-    //Verificar integridade do arquivo
-    if(!arquivo_integro(file_bin)){
-        printf("Falha no processamento do arquivo.");
-        return;
-    }
 
     //Escrever cabecalho arquivo.BIN
     rewind(file_bin);
@@ -355,7 +341,6 @@ void remove_reg_filtro(char* nome_file_bin, int qtd_it) {
                    (!strcmp(campo, TEMPO) && !strcmp(reg->tempo, valor)) ||
                    (!strcmp(campo, CIDADE_ORIG) && !strcmp(reg->cidade_orig, valor)) ||
                    (!strcmp(campo, CIDADE_DEST) && !strcmp(reg->cidade_dest, valor));
-
             //Se a condicao for satisfeita, remover registro
             if(cond) {
                 fseek(file_bin, -(TAM_REG), SEEK_CUR);
@@ -366,16 +351,10 @@ void remove_reg_filtro(char* nome_file_bin, int qtd_it) {
         }
     }
 
-    //Contar Vertices e Arestas
+    //Contar Vertices e Arestas e reescrever cabecalho com dados computados.
     lista = (ListaArestaVertice_PTR) calloc(1, sizeof(ListaArestaVertice));
-    atualizar_arq_vertice(file_bin, lista);
-
-    //Reescrever cabecalho com dados computados.
-    cab->status = STATUS_OK;
-    cab->numeroVertices = lista->numeroVertices;
-    cab->numeroArestas = lista->numeroArestas;
+    atualizar_cabecalho(file_bin, lista, cab);
     free(lista);
-    escrever_cabecalho(file_bin, cab);
     free(cab);
 
     fclose(file_bin);
@@ -385,21 +364,16 @@ void remove_reg_filtro(char* nome_file_bin, int qtd_it) {
 /** FUNC[6] - Inserir registro em arquivo.BIN nos locais onde existem registros removidos */
 void inserir_reg(char* nome_file_bin, int qtd_inserir){
     FILE* file_bin = fopen(nome_file_bin, "rb+");   //Abre arquivo.BIN para leitura/escrita.
-    if(!file_bin){
+
+    //Verificar existencia e integridade do arquivo
+    if(!file_bin || !arquivo_integro(file_bin)){
         printf("Falha no processamento do arquivo.");
         return;
     }
 
-    char c;
     Cabecalho_PTR cab;
     Registro_PTR reg;
     ListaArestaVertice_PTR lista;
-
-    //Verificar integridade do arquivo
-    if(!arquivo_integro(file_bin)){
-        printf("Falha no processamento do arquivo.");
-        return;
-    }
 
     //Escrevendo cabecalho .BIN
     rewind(file_bin);
@@ -418,7 +392,7 @@ void inserir_reg(char* nome_file_bin, int qtd_inserir){
         scan_quote_string(reg->cidade_dest);
         scan_quote_string(reg->tempo);
 
-        //Insercao estatica = no fim do arquivo
+        //Insercao estatica => no fim do arquivo
         fseek(file_bin, 0, SEEK_END);       //Pulando para o fim do arquivo
 
         //Salvando novo registro
@@ -426,16 +400,10 @@ void inserir_reg(char* nome_file_bin, int qtd_inserir){
         free(reg);
     }
 
-    //Contar Vertices e Arestas
+    //Contar Vertices e Arestas e reescrever cabecalho com dados computados.
     lista = (ListaArestaVertice_PTR) calloc(1, sizeof(ListaArestaVertice));
-    atualizar_arq_vertice(file_bin, lista);
-
-    //Reescrever cabecalho com dados computados.
-    cab->status = STATUS_OK;
-    cab->numeroVertices = lista->numeroVertices;
-    cab->numeroArestas = lista->numeroArestas;
+    atualizar_cabecalho(file_bin, lista, cab);
     free(lista);
-    escrever_cabecalho(file_bin, cab);
     free(cab);
 
     fclose(file_bin);
@@ -445,23 +413,18 @@ void inserir_reg(char* nome_file_bin, int qtd_inserir){
 /** FUNC[7] - Atualizar registro em arquivo.BIN com filtro de valor de campo */
 void atualizar_campo_registro(char* nome_file, int qtd_atualizacoes) {
     FILE* file_bin = fopen(nome_file, "rb+");   //Abre arquivo.BIN para leitura/escrita.
-    if(!file_bin) {
+
+    //Verificar existencia e integridade do arquivo
+    if(!file_bin || !arquivo_integro(file_bin)) {
         printf("Falha no processamento do arquivo.");
         return;
     }
 
-    int RRN;
+    int RRN, aux;
     char campo[50], valor[50];
     ListaArestaVertice_PTR lista;
     Registro_PTR reg;
     Cabecalho_PTR cab;
-    int aux;
-
-    //Verificar integridade do arquivo
-    if(!arquivo_integro(file_bin)){
-        printf("Falha no processamento do arquivo.");
-        return;
-    }
 
     //Escrevendo cabecalho .BIN
     rewind(file_bin);
@@ -483,7 +446,7 @@ void atualizar_campo_registro(char* nome_file, int qtd_atualizacoes) {
 
         reg = (Registro_PTR) calloc(1, sizeof(Registro));
         aux = ler_reg(file_bin, reg);       //Le o registro a ser alterado
-        if(aux == ERRO) {
+        if(aux == ERRO || reg->UF_orig[0] == REMOVIDO) {
             free(reg);
             continue;
         }
@@ -509,16 +472,10 @@ void atualizar_campo_registro(char* nome_file, int qtd_atualizacoes) {
         free(reg);
     }
 
-    //Contar Vertices e Arestas
+    //Contar Vertices e Arestas e reescrever cabecalho com dados computados.
     lista = (ListaArestaVertice_PTR) calloc(1, sizeof(ListaArestaVertice));
-    atualizar_arq_vertice(file_bin, lista);
-
-    //Reescrever cabecalho com dados computados.
-    cab->status = STATUS_OK;
-    cab->numeroVertices = lista->numeroVertices;
-    cab->numeroArestas = lista->numeroArestas;
+    atualizar_cabecalho(file_bin, lista, cab);
     free(lista);
-    escrever_cabecalho(file_bin, cab);
     free(cab);
 
     fclose(file_bin);
@@ -529,7 +486,9 @@ void atualizar_campo_registro(char* nome_file, int qtd_atualizacoes) {
 void compact(char* nome_file_orig, char* nome_file_compac) {
     FILE* file_bin = fopen(nome_file_orig, "rb");           //Abre arquivo.BIN para leitura.
     FILE* file_bin_compac = fopen(nome_file_compac, "wb");  //Abre arquivo_compac.BIN para escrita.
-    if(!file_bin || !file_bin_compac) {
+
+    //Verificar existencia e integridade do arquivo
+    if(!file_bin || !file_bin_compac || !arquivo_integro(file_bin)) {
         printf("Falha no carregamento do arquivo.");
         return;
     }
@@ -538,12 +497,6 @@ void compact(char* nome_file_orig, char* nome_file_compac) {
     int aux;
     Registro_PTR reg;
     Cabecalho_PTR cab;
-
-    //Verificar integridade do arquivo
-    if(!arquivo_integro(file_bin)){
-        printf("Falha no carregamento do arquivo.");
-        return;
-    }
 
     //Lendo cabecalho arquivo.BIN
     cab = (Cabecalho_PTR) calloc(1, sizeof(Cabecalho));
@@ -650,31 +603,18 @@ int ler_reg(FILE* file_bin, Registro_PTR reg) {
 
 /** Exibe um registro em tela, de acordo com as especificacoes do trabalho */
 void exibe_reg(int RRN, Registro_PTR reg) {
-    printf("%d ", RRN);
-    printf("%s ", reg->UF_orig);
-    printf("%s ", reg->UF_dest);
-    printf("%d ", reg->distancia);
-    printf("%s ", reg->cidade_orig);
-    printf("%s", reg->cidade_dest);
+    printf("%d %s %s %d %s %s", RRN, reg->UF_orig, reg->UF_dest, reg->distancia, reg->cidade_orig, reg->cidade_dest);
     if(strcmp(reg->tempo, ""))
         printf(" %s", reg->tempo);
     printf("\n");
 }
 
-/** Escreve o cabebalho */
-void escrever_cabecalho(FILE* file_bin, Cabecalho_PTR cab) {
-    rewind(file_bin);
-    fwrite(&cab->status, sizeof(char), 1, file_bin);
-    fwrite(&cab->numeroVertices, sizeof(int), 1, file_bin);
-    fwrite(&cab->numeroArestas, sizeof(int), 1, file_bin);
-    fwrite(cab->dataUltimaCompactacao, 10 * sizeof(char), 1, file_bin);
-}
-
 /** Abre o arquivo do parametro.BIN
  * calcula o numero de vertices/arestas
  * reescreve os dados em vertives.BIN
+ * Atualiza cabecalho
 */
-void atualizar_arq_vertice(FILE* file_bin, ListaArestaVertice_PTR lista) {
+void atualizar_cabecalho(FILE* file_bin, ListaArestaVertice_PTR lista, Cabecalho_PTR cab) {
     FILE* file_vert = fopen("vertices.bin", "wb");      //Abre vertices.BIN para reescrita
     if(!file_vert) {
         printf("Falha no processamento do arquivo de vertice.");
@@ -726,6 +666,12 @@ void atualizar_arq_vertice(FILE* file_bin, ListaArestaVertice_PTR lista) {
         fwrite(&lista->lista_vertice[i]->qtd_rep, sizeof(int), 1, file_vert);
     }
     fclose(file_vert);
+
+    //Atuzalizando cabecalho
+    cab->status = STATUS_OK;
+    cab->numeroVertices = lista->numeroVertices;
+    cab->numeroArestas = lista->numeroArestas;
+    escrever_cabecalho(file_bin, cab);
 }
 
 /** Inserir/incrementar ao vetor de modo ordenado a Cidade do parametro */
@@ -765,6 +711,15 @@ void inserir_aresta(ListaArestaVertice_PTR lista, char* cidade) {
             lista->lista_vertice[i] = lista->lista_vertice[i-1];
         lista->lista_vertice[ind] = novo;   //Inserindo o novo elemento no vetor
     }
+}
+
+/** Escreve o cabebalho */
+void escrever_cabecalho(FILE* file_bin, Cabecalho_PTR cab) {
+    rewind(file_bin);
+    fwrite(&cab->status, sizeof(char), 1, file_bin);
+    fwrite(&cab->numeroVertices, sizeof(int), 1, file_bin);
+    fwrite(&cab->numeroArestas, sizeof(int), 1, file_bin);
+    fwrite(cab->dataUltimaCompactacao, 10 * sizeof(char), 1, file_bin);
 }
 
 /** Verifica se arquivo esta integro para uso */
