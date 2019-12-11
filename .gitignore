@@ -3,3 +3,11 @@
 *.o
 *.depend
 programaTrab1.layout
+Informacoes_adicionais/casos-de-teste-e-binarios/1.out
+*.in
+*.out
+*.bin
+*.csv
+*.txt
+*.zip
+*.pdf
